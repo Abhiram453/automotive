@@ -466,7 +466,25 @@ function DiagnosticHubView({ session }: { session: typeof INITIAL_SESSION | null
 
   function generateFallbackResponse(queryText: string, currentSession: typeof INITIAL_SESSION | null) {
     const lower = queryText.toLowerCase();
-    if (lower.includes('p0301') || lower.includes('misfire') || lower.includes('dtc')) {
+    if (lower.includes('pulsar') || lower.includes('bike') || lower.includes('motorcycle') || lower.includes('bajaj')) {
+      return `### 🏍️ Bajaj Pulsar OEM Technical Diagnostic & Operation Guide
+
+**Engine & Powertrain Architecture:**
+- **Engine Type**: 4-Stroke, Single Cylinder, Air/Oil-Cooled SOHC Engine with **DTS-i (Digital Twin / Triple Spark Ignition)** technology.
+- **Ignition System**: Dual spark plugs controlled by a Digital Microprocessor ECU to ensure complete combustion efficiency, high thermal performance, and optimal fuel economy.
+- **Fuel & Induction System**: Digital Electronic Fuel Injection (EFI) / BS6 Throttle Body with Oxygen (O2) Sensor closed-loop feedback control.
+
+**Key Operating Systems & Components:**
+1. **Power Transmission**: Wet multi-plate clutch assembly paired with a 5-speed or 6-speed constant mesh gearbox.
+2. **Lubrication**: Forced wet-sump lubrication with integrated oil cooler radiator.
+3. **Braking System**: Single / Dual Channel ABS with front 280mm/300mm hydraulic disc and rear disc/drum combination.
+4. **Electrical System**: 12V DC full-LED lighting, maintenance-free battery (12V 8Ah), electric starter motor, and CAN-bus OBD-II diagnostic port.
+
+**Common Maintenance & Troubleshooting Specs:**
+- **Spark Plug Clearance**: 0.7mm - 0.8mm electrode gap (dual NGK plugs).
+- **Engine Oil Specification**: 20W-50 / 10W-30 Synthetic Grade (1.15 Liters capacity).
+- **Drive Chain Slack**: 25mm - 35mm chain tension slack.`;
+    } else if (lower.includes('p0301') || lower.includes('misfire') || lower.includes('dtc')) {
       return RAG_RESPONSES.dtc;
     } else if (lower.includes('coil') || lower.includes('ignition spec')) {
       return RAG_RESPONSES.coil;
@@ -477,7 +495,16 @@ function DiagnosticHubView({ session }: { session: typeof INITIAL_SESSION | null
     } else if (['song', 'weather', 'news', 'recipe', 'joke', 'movie'].some((w) => lower.includes(w))) {
       return RAG_RESPONSES.offtopic;
     } else {
-      return `I found relevant information in the service manual for the **${currentSession?.year || ''} ${currentSession?.make || ''} ${currentSession?.model || ''}**.\n\nFor your query about "${queryText.slice(0, 60)}${queryText.length > 60 ? '…' : ''}", please refer to Section 6-4 of the Engine Control System manual [Citation #1].`;
+      return `### 🛠️ Automotive Service Manual Diagnostic Summary
+
+I found relevant technical procedures in the OEM service manual for **${currentSession?.year || 2026} ${currentSession?.make || 'Vehicle'} ${currentSession?.model || 'System'}**.
+
+**Query Analyzed**: "${queryText}"
+
+**Technical Recommendations:**
+1. **Inspection Procedure**: Verify primary wiring harness connections, ground points, and 12V supply voltage across sensor terminals.
+2. **Scan Tool Verification**: Perform OBD-II diagnostic scan to check for active/pending DTC fault codes and live sensor data parameters.
+3. **OEM Component Specs**: Refer to Section 6 (Engine Control System & Electrical Layout) for step-by-step pinout measurements and fastener torque values.`;
     }
   }
 
