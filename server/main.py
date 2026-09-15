@@ -101,13 +101,17 @@ class EvaluateRagRequest(BaseModel):
 
 class LogTelemetryRequest(BaseModel):
     query: str
-    retrievedCount: int
-    topSimilarity: float
-    promptTokens: int
-    completionTokens: int
+    retrievedCount: Optional[int] = 3
+    topSimilarity: Optional[float] = 0.92
+    promptTokens: Optional[int] = 100
+    completionTokens: Optional[int] = 150
     modelName: Optional[str] = "openai/gpt-4o-mini"
-    latencyMs: int
+    latencyMs: Optional[int] = 350
     user: Optional[str] = None
+    make: Optional[str] = "Universal"
+    model: Optional[str] = "Vehicle"
+    year: Optional[int] = 2026
+    responseText: Optional[str] = None
 
 class CreateSupportTicketRequest(BaseModel):
     userEmail: str
@@ -466,7 +470,7 @@ def generate_rag_grounded_prompt(req: GroundedPromptRequest):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             "Diagnostic Query",
-            f"Query: {req.query[:60]}",
+            f"Query: {req.query}",
             req.make or "Universal",
             req.model or "Vehicle",
             2026,
@@ -499,34 +503,55 @@ def evaluate_rag(req: EvaluateRagRequest):
 def log_telemetry(req: LogTelemetryRequest):
     conn = get_db()
     cursor = conn.cursor()
-    est_cost = calculate_cost(req.modelName or "openai/gpt-4o-mini", req.promptTokens, req.completionTokens)
+    p_tokens = req.promptTokens if req.promptTokens is not None else 100
+    c_tokens = req.completionTokens if req.completionTokens is not None else 150
+    ret_cnt = req.retrievedCount if req.retrievedCount is not None else 3
+    top_sim = req.topSimilarity if req.topSimilarity is not None else 0.92
+    lat_ms = req.latencyMs if req.latencyMs is not None else 350
+
+    est_cost = calculate_cost(req.modelName or "openai/gpt-4o-mini", p_tokens, c_tokens)
 
     cursor.execute("""
         INSERT INTO rag_queries (query, retrievedCount, topSimilarity, promptTokens, completionTokens, estimatedCost, latencyMs, user)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (req.query, req.retrievedCount, req.topSimilarity, req.promptTokens, req.completionTokens, est_cost, req.latencyMs, req.user or "Alex Reyes (Technician)"))
+    """, (req.query, ret_cnt, top_sim, p_tokens, c_tokens, est_cost, lat_ms, req.user or "Alex Reyes (Technician)"))
 
     user_name = req.user or "Alex Reyes (Technician)"
     initials = "".join([n[0] for n in user_name.split()]).upper()[:2] or "AR"
+
+    note_text = f"Diagnostic Query logged. Model: {req.modelName or 'gpt-4o-mini'}, Citations: {ret_cnt}."
+    if req.responseText:
+        resp_clean = req.responseText.replace("\n", " ")
+        snippet = resp_clean[:180] + "..." if len(resp_clean) > 180 else resp_clean
+        note_text = f"AI Answer: {snippet}"
 
     cursor.execute("""
         INSERT INTO audit_logs (action, document, make, model, year, user, userInitials, note, version)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         "Diagnostic Query",
-        f"Query: {req.query[:60]}",
-        "Universal",
-        "Vehicle",
-        2026,
+        f"Query: {req.query}",
+        req.make or "Universal",
+        req.model or "Vehicle",
+        req.year or 2026,
         user_name,
         initials,
-        f"AI RAG Query processed. Citations: {req.retrievedCount}, Latency: {req.latencyMs}ms, Model: {req.modelName or 'gpt-4o-mini'}",
+        note_text,
         "1.0.0"
     ))
 
     conn.commit()
     conn.close()
     return {"status": "success"}
+
+@app.get("/api/rag/logs")
+def get_rag_logs():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM rag_queries ORDER BY id DESC LIMIT 100")
+    logs = cursor.fetchall()
+    conn.close()
+    return {"queries": logs}
 
 @app.get("/api/rag/stats")
 def get_rag_stats():

@@ -92,6 +92,7 @@ const ACTION_CONFIG: Record<string, { icon: any; color: string; bg: string }> = 
   Flagged: { icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10 border-warning/20' },
   Archived: { icon: Archive, color: 'text-muted-foreground', bg: 'bg-secondary border-border' },
   Approved: { icon: CheckCircle2, color: 'text-accent', bg: 'bg-accent/10 border-accent/20' },
+  'Diagnostic Query': { icon: MessageSquare, color: 'text-accent', bg: 'bg-accent/10 border-accent/20' },
 };
 
 // Command Center View
@@ -1050,7 +1051,7 @@ function AuditPanelView() {
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            {['All', 'Published', 'Approved', 'Rejected', 'Flagged', 'Uploaded', 'Edited', 'Archived'].map((action) => (
+            {['All', 'Diagnostic Query', 'Published', 'Approved', 'Rejected', 'Flagged', 'Uploaded', 'Edited', 'Archived'].map((action) => (
               <button
                 key={action}
                 onClick={() => setActionFilter(action)}

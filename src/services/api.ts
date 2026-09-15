@@ -146,13 +146,17 @@ export async function evaluateRAG(query: string, responseText: string, retrieved
 
 export async function logRAGQueryTelemetry(telemetry: {
   query: string;
-  retrievedCount: number;
-  topSimilarity: number;
-  promptTokens: number;
-  completionTokens: number;
-  modelName: string;
-  latencyMs: number;
+  retrievedCount?: number;
+  topSimilarity?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  modelName?: string;
+  latencyMs?: number;
   user?: string;
+  make?: string;
+  model?: string;
+  year?: number;
+  responseText?: string;
 }) {
   try {
     await fetch(`${API_BASE}/rag/log-query`, {
