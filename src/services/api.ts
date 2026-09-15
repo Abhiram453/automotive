@@ -4,7 +4,7 @@ export async function registerUserInDb(userData: {
   fullName: string;
   email: string;
   password: string;
-  role: 'technician' | 'manager';
+  role: 'technician' | 'manager' | 'super_admin';
 }) {
   try {
     const res = await fetch(`${API_BASE}/auth/signup`, {
