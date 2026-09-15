@@ -231,6 +231,19 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS diagnostic_chat_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            technicianEmail TEXT NOT NULL,
+            vin TEXT,
+            query TEXT NOT NULL,
+            response TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'answered',
+            retrievedCount INTEGER DEFAULT 0,
+            make TEXT,
+            model TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             action TEXT NOT NULL,
@@ -587,5 +600,22 @@ def seed_initial_data(db_wrap):
             VALUES (?, ?, ?, ?, ?)
         """, initial_feedback)
         print(f"[OK] Demo technician feedback items seeded into {DB_ENGINE.upper()} database.")
+
+    # Seed demo diagnostic chat logs if empty
+    cursor.execute("SELECT COUNT(*) as count FROM diagnostic_chat_logs")
+    chat_cnt_row = cursor.fetchone()
+    chat_count = chat_cnt_row["count"] if chat_cnt_row else 0
+    if chat_count == 0:
+        initial_chat_logs = [
+            ("alex.reyes@auraos.io", "1HGCR2F83PA001892", "Check DTC P0301 Cylinder 1 Misfire procedure and spark plug torque spec", "Diagnostic Troubleshooting for DTC P0301 (Cylinder 1 Misfire):\n1. Inspect ignition coil 1 boot for oil contamination or cracks.\n2. Spark Plug Torque Spec: OEM Spec 13 ft-lbs (18 Nm). Electrode gap: 0.039 - 0.043 in.", "answered", 3, "Honda", "Accord"),
+            ("marcus.webb@auraos.io", "4T1B11HK4NU102934", "What is the MAF sensor cleaning procedure for Camry DTC P0171?", "Clean Mass Air Flow (MAF) sensor using aerosol contact cleaner. Inspect air intake boot joints for downstream air leaks. Fuel pressure spec: 44-50 PSI.", "answered", 2, "Toyota", "Camry"),
+            ("alex.reyes@auraos.io", "1FTVW1EL8PW048123", "How do I fix a flat tire on my bicycle?", "⚠️ Out-of-Domain Query Refused: This platform is strictly restricted to OEM automotive service manuals and OBD-II diagnostics.", "refused", 0, "Ford", "F-150"),
+            ("priya.nair@auraos.io", "1FTVW1EL8PW048123", "High voltage battery disconnect procedure for F-150 Lightning (P0A80)", "Wear Class 00 (500V rated) rubber safety gloves. Remove HV Manual Service Disconnect (MSD) plug under rear seat and wait 10 minutes. Verify zero potential (< 5V DC).", "answered", 4, "Ford", "F-150")
+        ]
+        cursor.executemany("""
+            INSERT INTO diagnostic_chat_logs (technicianEmail, vin, query, response, status, retrievedCount, make, model)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, initial_chat_logs)
+        print(f"[OK] Seeded initial diagnostic chat logs into {DB_ENGINE.upper()} database.")
 
     db_wrap.commit()

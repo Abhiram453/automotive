@@ -146,17 +146,13 @@ export async function evaluateRAG(query: string, responseText: string, retrieved
 
 export async function logRAGQueryTelemetry(telemetry: {
   query: string;
-  retrievedCount?: number;
-  topSimilarity?: number;
-  promptTokens?: number;
-  completionTokens?: number;
-  modelName?: string;
-  latencyMs?: number;
+  retrievedCount: number;
+  topSimilarity: number;
+  promptTokens: number;
+  completionTokens: number;
+  modelName: string;
+  latencyMs: number;
   user?: string;
-  make?: string;
-  model?: string;
-  year?: number;
-  responseText?: string;
 }) {
   try {
     await fetch(`${API_BASE}/rag/log-query`, {
@@ -444,3 +440,47 @@ export async function validateDocumentInDb(docId: number, status: string, valida
     return null;
   }
 }
+
+export async function fetchManagerChatLogsFromDb(filters?: { search?: string; technician?: string; status?: string; vin?: string }) {
+  try {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.technician && filters.technician !== 'All') params.append('technician', filters.technician);
+    if (filters?.status && filters.status !== 'All') params.append('status', filters.status);
+    if (filters?.vin && filters.vin !== 'All') params.append('vin', filters.vin);
+
+    const res = await fetch(`${API_BASE}/manager/chat-logs?${params.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to fetch chat logs');
+    return data.chatLogs;
+  } catch (err: any) {
+    console.warn('Fetch manager chat logs warning:', err.message);
+    return null;
+  }
+}
+
+export async function logManagerChatLogInDb(chatLogData: {
+  technicianEmail: string;
+  vin?: string;
+  query: string;
+  response: string;
+  status?: string;
+  retrievedCount?: number;
+  make?: string;
+  model?: string;
+}) {
+  try {
+    const res = await fetch(`${API_BASE}/manager/chat-logs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(chatLogData),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to log technician chat');
+    return data;
+  } catch (err: any) {
+    console.warn('Log technician chat warning:', err.message);
+    return null;
+  }
+}
+

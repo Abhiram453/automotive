@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { LayoutWrapper } from '@/components/LayoutWrapper';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
-import { uploadDocumentToDb, fetchDocumentsFromDb, fetchAuditLogsFromDb, fetchMetricsFromDb, fetchAllSessionsFromDb, fetchFeedbackFromDb, updateFeedbackStatusInDb } from '@/services/api';
+import { uploadDocumentToDb, fetchDocumentsFromDb, fetchAuditLogsFromDb, fetchMetricsFromDb, fetchAllSessionsFromDb, fetchFeedbackFromDb, updateFeedbackStatusInDb, fetchManagerChatLogsFromDb } from '@/services/api';
 import { 
   UploadCloud, 
   FileText, 
@@ -28,7 +28,12 @@ import {
   XCircle, 
   History,
   Database,
-  RefreshCw
+  RefreshCw,
+  MessageSquare,
+  Eye,
+  X,
+  User,
+  Car
 } from 'lucide-react';
 
 // Metrics Data
@@ -92,7 +97,6 @@ const ACTION_CONFIG: Record<string, { icon: any; color: string; bg: string }> = 
   Flagged: { icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10 border-warning/20' },
   Archived: { icon: Archive, color: 'text-muted-foreground', bg: 'bg-secondary border-border' },
   Approved: { icon: CheckCircle2, color: 'text-accent', bg: 'bg-accent/10 border-accent/20' },
-  'Diagnostic Query': { icon: MessageSquare, color: 'text-accent', bg: 'bg-accent/10 border-accent/20' },
 };
 
 // Command Center View
@@ -1051,7 +1055,7 @@ function AuditPanelView() {
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            {['All', 'Diagnostic Query', 'Published', 'Approved', 'Rejected', 'Flagged', 'Uploaded', 'Edited', 'Archived'].map((action) => (
+            {['All', 'Published', 'Approved', 'Rejected', 'Flagged', 'Uploaded', 'Edited', 'Archived'].map((action) => (
               <button
                 key={action}
                 onClick={() => setActionFilter(action)}
@@ -1160,8 +1164,375 @@ function AuditPanelView() {
   );
 }
 
+function TechnicianChatLogsView() {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [selectedTech, setSelectedTech] = useState('All');
+  const [selectedStatus, setSelectedStatus] = useState('All');
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
+
+  const loadChatLogs = async () => {
+    setLoading(true);
+    const data = await fetchManagerChatLogsFromDb({
+      search: search || undefined,
+      technician: selectedTech !== 'All' ? selectedTech : undefined,
+      status: selectedStatus !== 'All' ? selectedStatus : undefined,
+    });
+    if (data) {
+      setLogs(data);
+    } else {
+      setLogs([
+        {
+          id: 1,
+          technicianEmail: 'alex.rivera@auraos-diagnostics.com',
+          vin: '1HGBH41JXMN109186',
+          query: 'What does DTC P0301 mean and how do I fix it?',
+          response: 'DTC P0301 — Cylinder 1 Misfire Detected.\n\nRecommended action: Start with spark plug inspection. Replace if electrode gap exceeds 0.044".',
+          status: 'answered',
+          retrievedCount: 3,
+          make: 'Honda',
+          model: 'Accord EX-L',
+          timestamp: '2026-09-15 08:30:00'
+        },
+        {
+          id: 2,
+          technicianEmail: 'marcus.webb@auraos-diagnostics.com',
+          vin: '4T1B11HK5MU123456',
+          query: 'What are the ignition coil specs for this vehicle?',
+          response: 'Ignition Coil Specifications:\nPrimary resistance: 0.5–0.8 Ω at 68°F. Secondary resistance: 8,000–12,000 Ω.',
+          status: 'answered',
+          retrievedCount: 2,
+          make: 'Toyota',
+          model: 'Camry',
+          timestamp: '2026-09-15 09:12:45'
+        },
+        {
+          id: 3,
+          technicianEmail: 'priya.nair@auraos-diagnostics.com',
+          vin: '1FTFW1E84MK987654',
+          query: 'Can you recommend a good recipe for chocolate cake?',
+          response: 'This platform is limited to automotive diagnostics and service manuals. Please ask a vehicle-related query.',
+          status: 'refused',
+          retrievedCount: 0,
+          make: 'Ford',
+          model: 'F-150',
+          timestamp: '2026-09-15 09:45:10'
+        }
+      ]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadChatLogs();
+  }, [selectedTech, selectedStatus]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    loadChatLogs();
+  };
+
+  const techniciansList = Array.from(new Set(logs.map(l => l.technicianEmail))).filter(Boolean);
+
+  const exportCSV = () => {
+    if (logs.length === 0) {
+      toast.error('No chat logs to export');
+      return;
+    }
+    const headers = ['Log ID', 'Technician Email', 'VIN', 'Make', 'Model', 'Query', 'AI Response', 'Status', 'Citations', 'Timestamp'];
+    const rows = logs.map(l => [
+      l.id,
+      `"${l.technicianEmail || ''}"`,
+      `"${l.vin || ''}"`,
+      `"${l.make || ''}"`,
+      `"${l.model || ''}"`,
+      `"${(l.query || '').replace(/"/g, '""')}"`,
+      `"${(l.response || '').replace(/"/g, '""')}"`,
+      `"${l.status || ''}"`,
+      l.retrievedCount || 0,
+      `"${l.timestamp || ''}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `technician_chat_logs_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Technician chat logs exported to CSV!');
+  };
+
+  const totalLogs = logs.length;
+  const answeredCount = logs.filter(l => l.status === 'answered').length;
+  const refusedCount = logs.filter(l => l.status === 'refused').length;
+  const activeTechsCount = techniciansList.length;
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="bg-card border border-border rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 rounded-xl bg-accent/15 flex items-center justify-center">
+              <MessageSquare size={20} className="text-accent" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-foreground">Technician Diagnostic Chat Logs</h2>
+              <p className="text-xs text-muted-foreground">
+                Complete, real-time audit trail of technician RAG queries, AI responses, DTC searches, and status logs.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadChatLogs}
+            className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-foreground text-xs font-semibold rounded-lg hover:bg-secondary/80 border border-border transition-all"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            Refresh Logs
+          </button>
+          <button
+            onClick={exportCSV}
+            className="flex items-center gap-1.5 px-3 py-2 bg-accent text-accent-foreground text-xs font-semibold rounded-lg hover:bg-accent/90 transition-all shadow-sm"
+          >
+            <Download size={14} />
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Total Queries Logged</p>
+          <p className="text-2xl font-bold text-foreground font-mono-nums">{totalLogs}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Answered Queries</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl font-bold text-success font-mono-nums">{answeredCount}</p>
+            <span className="text-xs text-muted-foreground font-mono-nums">({totalLogs > 0 ? Math.round((answeredCount / totalLogs) * 100) : 0}%)</span>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Refused / Out-of-Domain</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl font-bold text-warning font-mono-nums">{refusedCount}</p>
+            <span className="text-xs text-muted-foreground font-mono-nums">({totalLogs > 0 ? Math.round((refusedCount / totalLogs) * 100) : 0}%)</span>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Active Technicians</p>
+          <p className="text-2xl font-bold text-foreground font-mono-nums">{activeTechsCount}</p>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+        <form onSubmit={handleSearchSubmit} className="flex-1 min-w-[240px] relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search query, answer, VIN or technician..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 bg-secondary border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
+          />
+        </form>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Filter size={14} />
+            <span>Tech:</span>
+            <select
+              value={selectedTech}
+              onChange={(e) => setSelectedTech(e.target.value)}
+              className="bg-secondary border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
+            >
+              <option value="All">All Technicians</option>
+              {techniciansList.map((tech) => (
+                <option key={tech} value={tech}>{tech}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>Status:</span>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="bg-secondary border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none"
+            >
+              <option value="All">All Statuses</option>
+              <option value="answered">✓ Answered</option>
+              <option value="refused">⚠️ Refused</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <Loader2 size={28} className="animate-spin text-accent" />
+            <p className="text-xs text-muted-foreground">Fetching chat logs from persistent database...</p>
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
+            <MessageSquare size={32} className="text-muted-foreground/40 mb-1" />
+            <h3 className="text-sm font-semibold text-foreground">No Chat Logs Found</h3>
+            <p className="text-xs text-muted-foreground max-w-sm">
+              No technician diagnostic queries match your filters. Queries sent from the Technician Dashboard will automatically appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-secondary/60 border-b border-border text-xs text-muted-foreground font-semibold">
+                  <th className="py-3 px-4">Technician</th>
+                  <th className="py-3 px-4">Vehicle / VIN</th>
+                  <th className="py-3 px-4">Query Asked</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Timestamp</th>
+                  <th className="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border text-xs">
+                {logs.map((log) => {
+                  const techName = log.technicianEmail ? log.technicianEmail.split('@')[0].replace('.', ' ') : 'Technician';
+                  const isRefused = log.status === 'refused';
+                  return (
+                    <tr key={log.id} className="hover:bg-secondary/40 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center shrink-0">
+                            <User size={13} className="text-accent" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-foreground capitalize">{techName}</p>
+                            <p className="text-[11px] text-muted-foreground">{log.technicianEmail}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div>
+                          <p className="font-semibold text-foreground">{log.make || 'Honda'} {log.model || 'Accord'}</p>
+                          <p className="text-[11px] text-muted-foreground font-mono">{log.vin || 'N/A'}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 max-w-xs">
+                        <p className="text-foreground line-clamp-2 font-medium" title={log.query}>
+                          "{log.query}"
+                        </p>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                          isRefused
+                            ? 'bg-warning/15 text-warning border-warning/20'
+                            : 'bg-success/15 text-success border-success/20'
+                        }`}>
+                          {isRefused ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
+                          {isRefused ? 'Refused' : 'Answered'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground font-mono-nums whitespace-nowrap">
+                        {log.timestamp}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          onClick={() => setSelectedLog(log)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-foreground hover:bg-accent/15 hover:text-accent border border-border rounded-lg transition-all text-xs font-medium"
+                        >
+                          <Eye size={13} />
+                          View Dialog
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {selectedLog && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-0">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-secondary/50">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-accent/15 flex items-center justify-center">
+                  <MessageSquare size={18} className="text-accent" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Diagnostic Chat Dialog Details</h3>
+                  <p className="text-xs text-muted-foreground">Log ID: #{selectedLog.id} · {selectedLog.timestamp}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 bg-secondary/50 border border-border rounded-xl text-xs">
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Technician</span>
+                  <span className="font-semibold text-foreground">{selectedLog.technicianEmail}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Vehicle / VIN</span>
+                  <span className="font-semibold text-foreground">{selectedLog.make} {selectedLog.model} ({selectedLog.vin})</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">Query Status</span>
+                  <span className={`font-semibold capitalize ${selectedLog.status === 'refused' ? 'text-warning' : 'text-success'}`}>
+                    {selectedLog.status} ({selectedLog.retrievedCount || 0} citations)
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-2">
+                  👨‍🔧 Technician Query
+                </label>
+                <div className="p-4 bg-secondary border border-border rounded-xl text-sm text-foreground leading-relaxed font-medium">
+                  {selectedLog.query}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-2">
+                  🤖 AuraOS AI Diagnostic Response
+                </label>
+                <div className="p-4 bg-background border border-border rounded-xl text-xs text-foreground leading-relaxed whitespace-pre-wrap font-mono">
+                  {selectedLog.response}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-border bg-secondary/50 flex justify-end">
+              <button
+                onClick={() => setSelectedLog(null)}
+                className="px-5 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 transition-all text-xs"
+              >
+                Close Dialog View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ManagerPortalPage() {
-  const [activeTab, setActiveTab] = useState<'command' | 'upload' | 'knowledge' | 'audit'>('command');
+  const [activeTab, setActiveTab] = useState<'command' | 'upload' | 'knowledge' | 'audit' | 'chat_logs'>('command');
   const [title, setTitle] = useState('Command Center');
   const navigate = useNavigate();
 
@@ -1172,7 +1543,7 @@ export default function ManagerPortalPage() {
     }
   }, [navigate]);
 
-  const setTab = (id: 'command' | 'upload' | 'knowledge' | 'audit', label: string) => {
+  const setTab = (id: 'command' | 'upload' | 'knowledge' | 'audit' | 'chat_logs', label: string) => {
     setActiveTab(id);
     setTitle(label);
   };
@@ -1187,6 +1558,7 @@ export default function ManagerPortalPage() {
         if (id === 'upload') setTab('upload', 'Upload Documents');
         if (id === 'knowledge') setTab('knowledge', 'Knowledge Base');
         if (id === 'audit') setTab('audit', 'Audit Panel');
+        if (id === 'chat_logs') setTab('chat_logs', 'Technician Chat Logs');
       }}
     >
       <div className="space-y-6">
@@ -1197,6 +1569,7 @@ export default function ManagerPortalPage() {
             { id: 'upload', label: 'Upload Documents' },
             { id: 'knowledge', label: 'Knowledge Base' },
             { id: 'audit', label: 'Audit Panel' },
+            { id: 'chat_logs', label: '💬 Technician Chat Logs' },
           ].map((t) => (
             <button
               key={t.id}
@@ -1217,6 +1590,7 @@ export default function ManagerPortalPage() {
         {activeTab === 'upload' && <UploadDocumentsView />}
         {activeTab === 'knowledge' && <KnowledgeBaseView />}
         {activeTab === 'audit' && <AuditPanelView />}
+        {activeTab === 'chat_logs' && <TechnicianChatLogsView />}
       </div>
     </LayoutWrapper>
   );

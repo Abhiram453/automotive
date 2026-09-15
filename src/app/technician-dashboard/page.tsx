@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { LayoutWrapper } from '@/components/LayoutWrapper';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
-import { submitFeedbackInDb } from '@/services/api';
+import { submitFeedbackInDb, logManagerChatLogInDb } from '@/services/api';
 import { queryOpenRouter } from '@/services/openrouter';
 import { 
   Car, 
@@ -391,7 +391,11 @@ function DiagnosticHubView({ session }: { session: typeof INITIAL_SESSION | null
       ? `${session.year} ${session.make} ${session.model} (VIN: ${session.vin}, Mileage: ${session.mileage.toLocaleString()} mi, DTC: ${session.dtcCodes.join(', ')})`
       : undefined;
 
-    let finalAnswer = '';
+    let techEmail = 'alex.rivera@auraos-diagnostics.com';
+    try {
+      const u = JSON.parse(localStorage.getItem('auraos_user') || '{}');
+      if (u?.email) techEmail = u.email;
+    } catch (e) {}
 
     if (openRouterKey.trim()) {
       try {
@@ -404,8 +408,6 @@ function DiagnosticHubView({ session }: { session: typeof INITIAL_SESSION | null
           model: selectedModel,
         });
 
-        finalAnswer = ragResult.answer;
-
         const assistantMsg = {
           id: `msg-assistant-${Date.now()}`,
           role: 'assistant' as const,
@@ -417,74 +419,76 @@ function DiagnosticHubView({ session }: { session: typeof INITIAL_SESSION | null
         };
 
         setMessages((prev) => [...prev, assistantMsg]);
+
+        // Auto-log to Manager Audit Database
+        logManagerChatLogInDb({
+          technicianEmail: techEmail,
+          vin: session?.vin || '1HGBH41JXMN109186',
+          query: queryText,
+          response: ragResult.answer,
+          status: ragResult.answer.includes('limited to automotive diagnostics') ? 'refused' : 'answered',
+          retrievedCount: ragResult.retrievedChunks?.length || 1,
+          make: session?.make || 'Honda',
+          model: session?.model || 'Accord EX-L',
+        });
       } catch (err: any) {
         toast.error(`OpenRouter Error: ${err.message || 'Failed to query live AI'}`);
-        finalAnswer = generateFallbackResponse(queryText, session);
+        const fallbackReply = generateFallbackResponse(queryText, session);
         setMessages((prev) => [
           ...prev,
           {
             id: `msg-assistant-fallback-${Date.now()}`,
             role: 'assistant',
-            content: `⚠️ *OpenRouter connection issue. Fallback RAG response:* \n\n${finalAnswer}`,
+            content: `⚠️ *OpenRouter connection issue. Fallback RAG response:* \n\n${fallbackReply}`,
             timestamp: getTimeString(),
           },
         ]);
+
+        logManagerChatLogInDb({
+          technicianEmail: techEmail,
+          vin: session?.vin || '1HGBH41JXMN109186',
+          query: queryText,
+          response: fallbackReply,
+          status: fallbackReply.includes('limited to automotive diagnostics') ? 'refused' : 'answered',
+          retrievedCount: 1,
+          make: session?.make || 'Honda',
+          model: session?.model || 'Accord EX-L',
+        });
       } finally {
         setLoading(false);
       }
     } else {
-      await new Promise((r) => setTimeout(r, 500));
-      finalAnswer = generateFallbackResponse(queryText, session);
+      await new Promise((r) => setTimeout(r, 600));
+      const replyContent = generateFallbackResponse(queryText, session);
 
       const assistantMsg = {
         id: `msg-assistant-${Date.now()}`,
         role: 'assistant' as const,
-        content: finalAnswer,
+        content: replyContent,
         timestamp: getTimeString(),
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
+
+      // Auto-log to Manager Audit Database
+      logManagerChatLogInDb({
+        technicianEmail: techEmail,
+        vin: session?.vin || '1HGBH41JXMN109186',
+        query: queryText,
+        response: replyContent,
+        status: replyContent.includes('limited to automotive diagnostics') ? 'refused' : 'answered',
+        retrievedCount: 1,
+        make: session?.make || 'Honda',
+        model: session?.model || 'Accord EX-L',
+      });
+
       setLoading(false);
     }
-
-    // Guaranteed Database Log: Record EVERY conversation (Query + AI Answer) in audit_logs & rag_queries tables
-    logRAGQueryTelemetry({
-      query: queryText,
-      retrievedCount: 3,
-      topSimilarity: 0.92,
-      promptTokens: Math.ceil(queryText.length / 4) + 120,
-      completionTokens: Math.ceil(finalAnswer.length / 4) + 50,
-      modelName: selectedModel || 'openai/gpt-4o-mini',
-      latencyMs: 350,
-      user: session?.userEmail || 'Alex Reyes (Technician)',
-      make: session?.make || 'Universal',
-      model: session?.model || 'Vehicle',
-      year: session?.year || 2026,
-      responseText: finalAnswer,
-    });
   };
 
   function generateFallbackResponse(queryText: string, currentSession: typeof INITIAL_SESSION | null) {
     const lower = queryText.toLowerCase();
-    if (lower.includes('pulsar') || lower.includes('bike') || lower.includes('motorcycle') || lower.includes('bajaj')) {
-      return `### 🏍️ Bajaj Pulsar OEM Technical Diagnostic & Operation Guide
-
-**Engine & Powertrain Architecture:**
-- **Engine Type**: 4-Stroke, Single Cylinder, Air/Oil-Cooled SOHC Engine with **DTS-i (Digital Twin / Triple Spark Ignition)** technology.
-- **Ignition System**: Dual spark plugs controlled by a Digital Microprocessor ECU to ensure complete combustion efficiency, high thermal performance, and optimal fuel economy.
-- **Fuel & Induction System**: Digital Electronic Fuel Injection (EFI) / BS6 Throttle Body with Oxygen (O2) Sensor closed-loop feedback control.
-
-**Key Operating Systems & Components:**
-1. **Power Transmission**: Wet multi-plate clutch assembly paired with a 5-speed or 6-speed constant mesh gearbox.
-2. **Lubrication**: Forced wet-sump lubrication with integrated oil cooler radiator.
-3. **Braking System**: Single / Dual Channel ABS with front 280mm/300mm hydraulic disc and rear disc/drum combination.
-4. **Electrical System**: 12V DC full-LED lighting, maintenance-free battery (12V 8Ah), electric starter motor, and CAN-bus OBD-II diagnostic port.
-
-**Common Maintenance & Troubleshooting Specs:**
-- **Spark Plug Clearance**: 0.7mm - 0.8mm electrode gap (dual NGK plugs).
-- **Engine Oil Specification**: 20W-50 / 10W-30 Synthetic Grade (1.15 Liters capacity).
-- **Drive Chain Slack**: 25mm - 35mm chain tension slack.`;
-    } else if (lower.includes('p0301') || lower.includes('misfire') || lower.includes('dtc')) {
+    if (lower.includes('p0301') || lower.includes('misfire') || lower.includes('dtc')) {
       return RAG_RESPONSES.dtc;
     } else if (lower.includes('coil') || lower.includes('ignition spec')) {
       return RAG_RESPONSES.coil;
@@ -495,16 +499,7 @@ function DiagnosticHubView({ session }: { session: typeof INITIAL_SESSION | null
     } else if (['song', 'weather', 'news', 'recipe', 'joke', 'movie'].some((w) => lower.includes(w))) {
       return RAG_RESPONSES.offtopic;
     } else {
-      return `### 🛠️ Automotive Service Manual Diagnostic Summary
-
-I found relevant technical procedures in the OEM service manual for **${currentSession?.year || 2026} ${currentSession?.make || 'Vehicle'} ${currentSession?.model || 'System'}**.
-
-**Query Analyzed**: "${queryText}"
-
-**Technical Recommendations:**
-1. **Inspection Procedure**: Verify primary wiring harness connections, ground points, and 12V supply voltage across sensor terminals.
-2. **Scan Tool Verification**: Perform OBD-II diagnostic scan to check for active/pending DTC fault codes and live sensor data parameters.
-3. **OEM Component Specs**: Refer to Section 6 (Engine Control System & Electrical Layout) for step-by-step pinout measurements and fastener torque values.`;
+      return `I found relevant information in the service manual for the **${currentSession?.year || ''} ${currentSession?.make || ''} ${currentSession?.model || ''}**.\n\nFor your query about "${queryText.slice(0, 60)}${queryText.length > 60 ? '…' : ''}", please refer to Section 6-4 of the Engine Control System manual [Citation #1].`;
     }
   }
 
@@ -1293,7 +1288,6 @@ import {
   decodeVinInDb,
   fetchPairedDevicesFromDb,
   pairDeviceInDb,
-  logRAGQueryTelemetry,
 } from '@/services/api';
 
 export default function TechnicianDashboardPage() {

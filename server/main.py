@@ -101,17 +101,13 @@ class EvaluateRagRequest(BaseModel):
 
 class LogTelemetryRequest(BaseModel):
     query: str
-    retrievedCount: Optional[int] = 3
-    topSimilarity: Optional[float] = 0.92
-    promptTokens: Optional[int] = 100
-    completionTokens: Optional[int] = 150
+    retrievedCount: int
+    topSimilarity: float
+    promptTokens: int
+    completionTokens: int
     modelName: Optional[str] = "openai/gpt-4o-mini"
-    latencyMs: Optional[int] = 350
+    latencyMs: int
     user: Optional[str] = None
-    make: Optional[str] = "Universal"
-    model: Optional[str] = "Vehicle"
-    year: Optional[int] = 2026
-    responseText: Optional[str] = None
 
 class CreateSupportTicketRequest(BaseModel):
     userEmail: str
@@ -140,6 +136,16 @@ class LogDiagnosticRequest(BaseModel):
     query: str
     response: str
     createdBy: str
+
+class CreateChatLogRequest(BaseModel):
+    technicianEmail: str
+    vin: Optional[str] = None
+    query: str
+    response: str
+    status: Optional[str] = "answered"
+    retrievedCount: Optional[int] = 0
+    make: Optional[str] = None
+    model: Optional[str] = None
 
 class UpdateUserRoleRequest(BaseModel):
     role: str
@@ -470,7 +476,7 @@ def generate_rag_grounded_prompt(req: GroundedPromptRequest):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             "Diagnostic Query",
-            f"Query: {req.query}",
+            f"Query: {req.query[:60]}",
             req.make or "Universal",
             req.model or "Vehicle",
             2026,
@@ -503,55 +509,34 @@ def evaluate_rag(req: EvaluateRagRequest):
 def log_telemetry(req: LogTelemetryRequest):
     conn = get_db()
     cursor = conn.cursor()
-    p_tokens = req.promptTokens if req.promptTokens is not None else 100
-    c_tokens = req.completionTokens if req.completionTokens is not None else 150
-    ret_cnt = req.retrievedCount if req.retrievedCount is not None else 3
-    top_sim = req.topSimilarity if req.topSimilarity is not None else 0.92
-    lat_ms = req.latencyMs if req.latencyMs is not None else 350
-
-    est_cost = calculate_cost(req.modelName or "openai/gpt-4o-mini", p_tokens, c_tokens)
+    est_cost = calculate_cost(req.modelName or "openai/gpt-4o-mini", req.promptTokens, req.completionTokens)
 
     cursor.execute("""
         INSERT INTO rag_queries (query, retrievedCount, topSimilarity, promptTokens, completionTokens, estimatedCost, latencyMs, user)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (req.query, ret_cnt, top_sim, p_tokens, c_tokens, est_cost, lat_ms, req.user or "Alex Reyes (Technician)"))
+    """, (req.query, req.retrievedCount, req.topSimilarity, req.promptTokens, req.completionTokens, est_cost, req.latencyMs, req.user or "Alex Reyes (Technician)"))
 
     user_name = req.user or "Alex Reyes (Technician)"
     initials = "".join([n[0] for n in user_name.split()]).upper()[:2] or "AR"
-
-    note_text = f"Diagnostic Query logged. Model: {req.modelName or 'gpt-4o-mini'}, Citations: {ret_cnt}."
-    if req.responseText:
-        resp_clean = req.responseText.replace("\n", " ")
-        snippet = resp_clean[:180] + "..." if len(resp_clean) > 180 else resp_clean
-        note_text = f"AI Answer: {snippet}"
 
     cursor.execute("""
         INSERT INTO audit_logs (action, document, make, model, year, user, userInitials, note, version)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         "Diagnostic Query",
-        f"Query: {req.query}",
-        req.make or "Universal",
-        req.model or "Vehicle",
-        req.year or 2026,
+        f"Query: {req.query[:60]}",
+        "Universal",
+        "Vehicle",
+        2026,
         user_name,
         initials,
-        note_text,
+        f"AI RAG Query processed. Citations: {req.retrievedCount}, Latency: {req.latencyMs}ms, Model: {req.modelName or 'gpt-4o-mini'}",
         "1.0.0"
     ))
 
     conn.commit()
     conn.close()
     return {"status": "success"}
-
-@app.get("/api/rag/logs")
-def get_rag_logs():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM rag_queries ORDER BY id DESC LIMIT 100")
-    logs = cursor.fetchall()
-    conn.close()
-    return {"queries": logs}
 
 @app.get("/api/rag/stats")
 def get_rag_stats():
@@ -788,6 +773,63 @@ def log_diagnostic(req: LogDiagnosticRequest):
         INSERT INTO diagnostics (vin, query, response, createdBy)
         VALUES (?, ?, ?, ?)
     """, (req.vin, req.query, req.response, req.createdBy))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
+
+@app.get("/api/manager/chat-logs")
+def get_manager_chat_logs(search: Optional[str] = None, technician: Optional[str] = None, status: Optional[str] = None, vin: Optional[str] = None):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    query = "SELECT * FROM diagnostic_chat_logs WHERE 1=1"
+    params = []
+
+    if search:
+        query += " AND (query LIKE ? OR response LIKE ? OR vin LIKE ? OR technicianEmail LIKE ?)"
+        term = f"%{search}%"
+        params.extend([term, term, term, term])
+    if technician and technician != "All":
+        query += " AND technicianEmail = ?"
+        params.append(technician)
+    if status and status != "All":
+        query += " AND status = ?"
+        params.append(status)
+    if vin and vin != "All":
+        query += " AND vin = ?"
+        params.append(vin)
+
+    query += " ORDER BY id DESC"
+    cursor.execute(query, params)
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    return {"chatLogs": rows}
+
+@app.post("/api/manager/chat-logs")
+def create_manager_chat_log(req: CreateChatLogRequest):
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO diagnostic_chat_logs (technicianEmail, vin, query, response, status, retrievedCount, make, model)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (req.technicianEmail, req.vin, req.query, req.response, req.status or "answered", req.retrievedCount or 0, req.make, req.model))
+
+    # Also log audit trail entry
+    initials = "".join([n[0] for n in req.technicianEmail.split("@")[0].split(".")]).upper()[:2] or "AR"
+    cursor.execute("""
+        INSERT INTO audit_logs (action, document, make, model, year, user, userInitials, note, version)
+        VALUES ('Chat Logged', ?, ?, ?, 2026, ?, ?, ?, '1.0.0')
+    """, (
+        f"Query: {req.query[:50]}",
+        req.make or "Universal",
+        req.model or "Vehicle",
+        req.technicianEmail,
+        initials,
+        f"Full Technician Chat recorded (Status: {req.status}, Citations: {req.retrievedCount})"
+    ))
+
     conn.commit()
     conn.close()
     return {"status": "success"}
