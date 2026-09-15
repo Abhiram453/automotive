@@ -76,6 +76,7 @@ export const Header: React.FC<HeaderProps> = ({ pageTitle, role, onMenuToggle })
       toast.info('🔑 Secret Admin Gate: 2/3 clicks — 1 more click to unlock');
     } else if (next >= 3) {
       toast.success('👑 Unlocking Super Admin Command Center…');
+      sessionStorage.setItem('aura_super_admin_auth', 'true');
       setLogoClicks(0);
       navigate('/super-admin');
       return;

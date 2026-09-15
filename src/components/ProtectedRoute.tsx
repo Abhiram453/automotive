@@ -26,6 +26,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     }
   } catch (e) {}
 
+  // Super Admin page handles its own secret PIN (8899) authentication and state
+  const isSuperAdminAuth = sessionStorage.getItem('aura_super_admin_auth') === 'true';
+  if (location.pathname === '/super-admin' || isSuperAdminAuth) {
+    return <>{children}</>;
+  }
+
   if (!userRole || !userObj) {
     toast.error('⚠️ Authentication required: Please sign in to access this workspace.');
     return <Navigate to="/" state={{ from: location }} replace />;
