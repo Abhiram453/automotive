@@ -29,6 +29,7 @@ const FEATURES = [
 const DEMO_CREDENTIALS = [
   { role: 'Technician', email: 'alex.reyes@auraos.io', password: 'Tech@2026!', emoji: '🔧', key: 'technician' },
   { role: 'Manager', email: 'sarah.kim@auraos.io', password: 'Mgr@2026!', emoji: '📊', key: 'manager' },
+  { role: 'Super Admin', email: 'admin.master@auraos.io', password: '8899', emoji: '👑', key: 'super_admin' },
 ];
 
 function LeftHeroPanel() {
@@ -218,6 +219,24 @@ function LoginForm({ initialRole, onAutofillRef }: { initialRole?: 'technician' 
     // Fallback authentication for quick demo access
     const validTech = data.role === 'technician' && data.email === 'alex.reyes@auraos.io' && data.password === 'Tech@2026!';
     const validMgr = data.role === 'manager' && data.email === 'sarah.kim@auraos.io' && data.password === 'Mgr@2026!';
+    const validAdmin = data.role === 'super_admin' || data.password === '8899' || data.email === 'admin.master@auraos.io';
+
+    if (data.role === 'super_admin' || validAdmin) {
+      sessionStorage.setItem('aura_super_admin_auth', 'true');
+      sessionStorage.setItem('aura_role', 'super_admin');
+      const userPayload = JSON.stringify({
+        name: 'Master Administrator',
+        email: data.email || 'admin.master@auraos.io',
+        role: 'super_admin',
+        avatar: '👑',
+      });
+      sessionStorage.setItem('aura_user', userPayload);
+      localStorage.setItem('aura_user', userPayload);
+      toast.success('👑 Master Admin Access Granted!');
+      navigate('/super-admin');
+      setLoading(false);
+      return;
+    }
 
     if (validTech || validMgr || (data.email && data.password.length >= 6)) {
       const userPayload = JSON.stringify({
@@ -265,6 +284,7 @@ function LoginForm({ initialRole, onAutofillRef }: { initialRole?: 'technician' 
             >
               <option value="technician">🔧 Technician</option>
               <option value="manager">📊 Manager</option>
+              <option value="super_admin">👑 Super Admin (PIN: 8899)</option>
             </select>
             <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           </div>

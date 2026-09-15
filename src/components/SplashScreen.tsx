@@ -15,6 +15,8 @@ import {
   LifeBuoy,
   Activity
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { AppLogo } from './AppLogo';
 import { Automotive3DCanvas } from './Automotive3DCanvas';
 import { ThemeToggle } from './ThemeToggle';
@@ -34,6 +36,30 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   onSignIn,
 }) => {
   const cardsRef = useRef<HTMLDivElement>(null);
+  const [logoClicks, setLogoClicks] = React.useState(0);
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const navigate = useNavigate();
+
+  const handleLogoClick = () => {
+    const next = logoClicks + 1;
+    setLogoClicks(next);
+    if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
+
+    if (next === 1) {
+      toast.info('🔑 Secret Admin Gate: 1/3 clicks');
+    } else if (next === 2) {
+      toast.info('🔑 Secret Admin Gate: 2/3 clicks — 1 more click to unlock');
+    } else if (next >= 3) {
+      toast.success('👑 Unlocking Super Admin Command Center…');
+      sessionStorage.setItem('aura_super_admin_auth', 'true');
+      sessionStorage.setItem('aura_role', 'super_admin');
+      setLogoClicks(0);
+      navigate('/super-admin');
+      return;
+    }
+
+    clickTimeoutRef.current = setTimeout(() => setLogoClicks(0), 3000);
+  };
 
   useEffect(() => {
     if (!cardsRef.current) return;
@@ -77,7 +103,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       {/* Solid Soft Black Header Navigation */}
       <header className="sticky top-0 z-50 bg-[#1c1c1c] text-white border-b border-neutral-800 px-6 sm:px-10 py-4 flex items-center justify-between shadow-md">
         <div className="flex items-center gap-3">
-          <AppLogo size={36} onClick={() => {}} />
+          <AppLogo size={36} onClick={handleLogoClick} />
           <div>
             <span className="font-serif-title font-bold text-lg tracking-tight text-white">
               Aura<span className="text-[#dc9750]">Automotive</span>
